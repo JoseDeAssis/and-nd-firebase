@@ -144,6 +144,7 @@ public class    MainActivity extends AppCompatActivity implements ChildEventList
                     //user is signed in
                     Toast.makeText(MainActivity.this, "You're signed in. Welcome to FriendlyChat!", Toast.LENGTH_SHORT).show();
                 } else {
+
                     //user is signed out
                     // Choose authentication providers
                     List<AuthUI.IdpConfig> providers = Arrays.asList(
