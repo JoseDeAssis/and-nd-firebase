@@ -16,7 +16,6 @@
 package com.google.firebase.udacity.friendlychat;
 
 import android.os.Bundle;
-import android.support.v7.app.AppCompatActivity;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
@@ -29,16 +28,32 @@ import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+
+import com.firebase.ui.auth.AuthUI;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class    MainActivity extends AppCompatActivity implements ChildEventListener {
 
     private static final String TAG = "MainActivity";
 
     public static final String ANONYMOUS = "anonymous";
     public static final int DEFAULT_MSG_LENGTH_LIMIT = 1000;
+    public static final int RC_SIGN_IN = 1;
 
     private ListView mMessageListView;
     private MessageAdapter mMessageAdapter;
@@ -46,6 +61,10 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton mPhotoPickerButton;
     private EditText mMessageEditText;
     private Button mSendButton;
+    private FirebaseDatabase mFirebaseDatabase;
+    private DatabaseReference mMessagesDatabaseReference;
+    private FirebaseAuth mFirebaseAuth;
+    private FirebaseAuth.AuthStateListener mAuthStateListener;
 
     private String mUsername;
 
@@ -56,12 +75,28 @@ public class MainActivity extends AppCompatActivity {
 
         mUsername = ANONYMOUS;
 
+        //initialize Firebase Components
+        mFirebaseDatabase = FirebaseDatabase.getInstance();
+        mFirebaseAuth = FirebaseAuth.getInstance();
+
+        mMessagesDatabaseReference = mFirebaseDatabase.getReference().child("messages");
+        mMessagesDatabaseReference.addChildEventListener(this);
+
         // Initialize references to views
-        mProgressBar = (ProgressBar) findViewById(R.id.progressBar);
-        mMessageListView = (ListView) findViewById(R.id.messageListView);
-        mPhotoPickerButton = (ImageButton) findViewById(R.id.photoPickerButton);
-        mMessageEditText = (EditText) findViewById(R.id.messageEditText);
-        mSendButton = (Button) findViewById(R.id.sendButton);
+        mProgressBar = findViewById(R.id.progressBar);
+        mMessageListView = findViewById(R.id.messageListView);
+        mPhotoPickerButton = findViewById(R.id.photoPickerButton);
+        mMessageEditText = findViewById(R.id.messageEditText);
+        mSendButton = findViewById(R.id.sendButton);
+        mSendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                FriendlyMessage friendlyMessage = new FriendlyMessage(mMessageEditText.getText().toString(), mUsername, null);
+                mMessagesDatabaseReference.push().setValue(friendlyMessage);
+
+                mMessageEditText.setText("");
+            }
+        });
 
         // Initialize message ListView and its adapter
         List<FriendlyMessage> friendlyMessages = new ArrayList<>();
@@ -100,16 +135,33 @@ public class MainActivity extends AppCompatActivity {
         });
         mMessageEditText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(DEFAULT_MSG_LENGTH_LIMIT)});
 
-        // Send button sends a message and clears the EditText
-        mSendButton.setOnClickListener(new View.OnClickListener() {
+        mAuthStateListener = new FirebaseAuth.AuthStateListener() {
             @Override
-            public void onClick(View view) {
-                // TODO: Send messages on click
+            public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+                FirebaseUser user = firebaseAuth.getCurrentUser();
 
-                // Clear input box
-                mMessageEditText.setText("");
+                if(user != null) {
+                    //user is signed in
+                    Toast.makeText(MainActivity.this, "You're signed in. Welcome to FriendlyChat!", Toast.LENGTH_SHORT).show();
+                } else {
+                    //user is signed out
+                    // Choose authentication providers
+                    List<AuthUI.IdpConfig> providers = Arrays.asList(
+                            new AuthUI.IdpConfig.EmailBuilder().build(),
+                            new AuthUI.IdpConfig.GoogleBuilder().build(),
+                            new AuthUI.IdpConfig.FacebookBuilder().build());
+
+                    // Create and launch sign-in intent
+                    startActivityForResult(
+                            AuthUI.getInstance()
+                                    .createSignInIntentBuilder()
+                                    .setIsSmartLockEnabled(false)
+                                    .setAvailableProviders(providers)
+                                    .build(),
+                            RC_SIGN_IN);
+                }
             }
-        });
+        };
     }
 
     @Override
@@ -122,5 +174,43 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onChildAdded(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+        FriendlyMessage friendlyMessage = dataSnapshot.getValue(FriendlyMessage.class);
+        mMessageAdapter.add(friendlyMessage);
+    }
+
+    @Override
+    public void onChildChanged(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+
+    }
+
+    @Override
+    public void onChildRemoved(@NonNull DataSnapshot dataSnapshot) {
+
+    }
+
+    @Override
+    public void onChildMoved(@NonNull DataSnapshot dataSnapshot, @Nullable String s) {
+
+    }
+
+    @Override
+    public void onCancelled(@NonNull DatabaseError databaseError) {
+
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mFirebaseAuth.removeAuthStateListener(mAuthStateListener);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mFirebaseAuth.addAuthStateListener(mAuthStateListener);
     }
 }
